@@ -96,7 +96,7 @@ BEGIN
 	WHERE ID = Customer_ID;
 	select ID,FName,MName,LName, DOB ,Sex ,PhoneNumber,Address,Mail from customer
         where ID = Customer_ID;
-END;
+END ;
 DELIMITER ;
 
 -- (ii.2). Cập nhật thông tin thanh toán.
@@ -109,8 +109,7 @@ CREATE PROCEDURE capnhat_giaodich(
 	Trans_CustomerID INT,
 	Trans_ISBN decimal(15,0),
 	Trans_PaymentID INT,
-	a int,
-	nmodel varchar(4)
+	a int,nmodel varchar(4)
 )
 BEGIN
 	insert into Transaction
@@ -315,12 +314,13 @@ BEGIN
 		P.Code as PubCode, P.Address as PubAddress, P.PhoneNumber as PubPhone, P.email as PubEmail,
         (select concat_ws(" ", A.fname, A.mname, A.lname)) as AuthName,
         SSN, A.address as AuthAdress, A.phonenumber as AuthPhone, A.sex as AuthSex, A.email as AuthEmail,
-        StorageID, StaffID, amount as Amount
+        StorageID, StaffID, amount as Amount, AField
     FROM BOOK B
 						JOIN PUBLISHER P ON P.NAME = PUBNAME
                         JOIN WRITTENBY ON BOOKISBN = B.ISBN
                         JOIN AUTHOR A ON AUTHORSSN = SSN
                         JOIN SSTORED S ON S.ISBN = B.ISBN 
+                        JOIN FIELD ON BOOKID = B.ISBN
 	WHERE B.ISBN = ISB;
 END //
 DELIMITER ;
@@ -329,8 +329,9 @@ DROP PROCEDURE if exists LOADNXB;
 DELIMITER //
 CREATE PROCEDURE loadNXB (pname varchar(50), isb decimal(15,0))
 BEGIN
-	SELECT ISBN, (select concat(B.ISBN,'.jpg')) as Image, Summary, Cost, B.Name as BookName, PubName, Year, Time  
-    FROM BOOK B JOIN PUBLISHER P ON P.NAME = PUBNAME
+	SELECT ISBN, (select concat(B.ISBN,'.jpg')) as Image, Summary, Cost, B.Name as BookName, PubName, Year, Time, AField
+    FROM BOOK B JOIN PUBLISHER P ON P.NAME = PUBNAME 
+    JOIN FIELD ON BOOKID = B.ISBN
 	WHERE ISBN != ISB AND PNAME = P.NAME;
 END //
 DELIMITER ;
@@ -359,20 +360,43 @@ end //
 delimiter ;
 
 
-INSERT INTO `field` (`BookID`, `AField`) VALUES ('999888777666555', 'Truyện');
-
-
-drop procedure if exists bookwcate;
-delimiter //
-create procedure bookwcate (cate varchar(20))
-begin
-	select distinct * from book b join field on b.isbn = field.bookid where cate = afield;
-
 drop procedure if exists allbooks;
 delimiter //
 create procedure allbooks ()
 begin
 	select distinct ISBN, Cost, Name, PubName, AField, concat_ws(" ", FName, MName, LName) as AuthName from book b join field on b.isbn = bookid join writtenby on bookisbn = b.isbn join author on ssn = authorssn;
-
 end //
 delimiter ;
+
+
+##############################################################################
+drop procedure if exists update_amount;
+delimiter |
+create procedure update_amount(nisbn decimal(15,0),cusID int)
+begin
+declare cid int default 0;
+select customerID into cid from cart where nisbn=BookID and cusID=customerID;
+if ((cusID,nisbn) in (select customerID,BookID from cart)) then
+update cart
+set amoutBook=amoutBook+1
+where nisbn=BookID and cusID=customerID;
+else 
+insert into cart value(cusID,nisbn,1);
+end if;
+end |
+delimiter ;
+##############################################################
+# thanh toán 
+drop procedure if exists update_tt;
+delimiter |
+create procedure update_tt(
+		TCustomerID INT,
+	TISBN decimal(15,0),
+	TPaymentID INT,
+	a int,nmodel int)
+    begin 
+    insert into Transaction
+	value (TCustomerID,TISBN,CURRENT_TIMESTAMP(),0,a,TPaymentID,nmodel,null);
+    delete from cart where customerID=TCustomerID and TISBN=BookID;
+    end |
+    delimiter ;
